@@ -1,0 +1,6 @@
+
+    location /static {
+        alias /var/www/webroot/ROOT/web/static;
+        expires 30d;
+    }
+

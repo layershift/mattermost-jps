@@ -1,0 +1,15 @@
+[program:mattermost]
+command=/var/www/webroot/ROOT/bin/platform
+process_name=%(program_name)s
+numprocs=1
+directory=/var/www/webroot/ROOT
+autostart=true
+autorestart=unexpected
+user=nginx
+stdout_logfile=/var/log/nginx/mattermost.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=10
+stderr_logfile=/var/log/nginx/mattermost-err.log
+stderr_logfile_maxbytes=10MB
+stderr_logfile_backups=10
+
