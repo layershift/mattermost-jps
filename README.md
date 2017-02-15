@@ -1,4 +1,6 @@
 #Mattermost deployment on Layershift Jelastic PaaS
 
-TODO: Readme
+More info at: https://blog.layershift.com/how-to-run-mattermost/
+
+## TODO: Readme
 
