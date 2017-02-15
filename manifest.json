@@ -59,7 +59,7 @@
                         "deploy": [{
                                 "name": "Mattermost",
                                 "context": "ROOT",
-                                "archive": "https://github.com/layershift/mattermost-jps/raw/master/deployment/mattermost.tar.gz"
+                                "archive": "http://jps.layershift.com/mattermost/mattermost.tar.gz"
                             }
                         ]
                     }
