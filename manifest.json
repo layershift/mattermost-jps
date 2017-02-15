@@ -1,0 +1,177 @@
+{
+    "jpsType": "install",
+    "application": {
+        "id": "mattermost3",
+        "name": "Mattermost v3.6.2",
+        "version": "3.6.2",
+        "type": "php",
+        "homepage": "http://www.mattermost.org/",
+        "logo": "https://raw.githubusercontent.com/layershift/mattermost-jps/master/images/mattermost.jpg",
+        "description": "Mattermost is a self-hosted solution for bringing all your team communication to one place, and making it searchable and accessible anywhere",
+        "env": {
+            "topology": {
+                "engine": "php5.4",
+                "nodes": [{
+                        "extip": false,
+                        "count": 1,
+                        "cloudlets": 16,
+                        "nodeType": "nginxphp",
+                        "displayName": "Mattermost Server"
+                    }, {
+                        "extip": false,
+                        "count": 1,
+                        "cloudlets": 8,
+                        "nodeType": "postgres9",
+                        "displayName": "Database Server"
+
+                    }
+                ]
+            },
+            "onAfterRestartNode[nodeType:nginx]": {
+                "call": [
+                        "stopMattermost",
+                        "startMattermost"
+                ]
+            },
+            "onAfterStart": {
+                "call": [
+                        "startMattermost"
+                ]
+            },
+            "onBeforeStop": {
+                "call": [
+                        "stopMattermost"
+                ]
+            }
+        },
+        "onInstall": {
+            "call": [
+                    "deployMattermost",
+                    "configureDB",
+                    "configureNginx",
+                    "configureMattermost",
+                    "startMattermost"
+            ]
+        },
+        "procedures": [{
+                "id": "deployMattermost",
+                "onCall": [{
+                        "deploy": [{
+                                "name": "Mattermost",
+                                "context": "ROOT",
+                                "archive": "https://github.com/layershift/mattermost-jps/raw/master/deployment/mattermost.tar.gz"
+                            }
+                        ]
+                    }
+                ]
+            }, {
+                "id": "configureDB",
+                "onCall": [{
+                        "executeShellCommands": [{
+                                "nodeType": "postgres9",
+                                "user": "root",
+                                "commands": [
+                                        "echo -e \"${nodes.postgres9.password}\n${nodes.postgres9.password}\n${nodes.postgres9.password}\n\" | su - postgres -c \"createuser -P -d -e mattermost -U webadmin\" 2>&1",
+                                        "echo -e \"${nodes.postgres9.password}\n\" | su - postgres -c \"createdb mattermost -U webadmin\" 2>&1",
+                                        "echo -e \"${nodes.postgres9.password}\nGRANT ALL PRIVILEGES ON DATABASE mattermost to mattermost\" | su - postgres -c \"psql template1 -U webadmin\" 2>&1"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }, {
+                "id": "configureNginx",
+                "onCall": [{
+                        "executeShellCommands": [{
+                                "nodeId": "${nodes.nginxphp[0].id}",
+                                "user": "root",
+                                "commands": [
+                                        "if [ -f /etc/yum.repos.d/mod-pagespeed.repo ]; then sed \"s/enabled=1/enabled=0/g\"; fi",
+                                        "yum install --nogpgcheck -q -y python-setuptools 2>&1",
+                                        "easy_install -q supervisor 2>&1",
+                                        "wget -q -O /root/nginx https://raw.githubusercontent.com/layershift/mattermost-jps/master/config/nginx 2>&1",
+                                        "wget -q -O /root/nginx-mattermost https://raw.githubusercontent.com/layershift/mattermost-jps/master/config/nginx-mattermost 2>&1",
+                                        "wget -q -O /root/nginxgzip https://raw.githubusercontent.com/layershift/mattermost-jps/master/config/nginxgzip 2>&1",
+                                        "wget -q -O /root/nginxcaching https://github.com/layershift/mattermost-jps/blob/master/config/nginxcaching 2>&1",
+                                        "systemctl enable sendmail",
+                                        "service sendmail start",
+                                        "rm /etc/nginx/nginx.conf",
+                                        "mv /root/nginx /etc/nginx/nginx.conf",
+                                        "sed -i \"7d\" /etc/php-fpm.conf",
+                                        "sed -i \"109d\" /etc/php-fpm.conf"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }, {
+                "id": "configureMattermost",
+                "onCall": [{
+                        "replaceInFile": [{
+                                "nodeId": "${nodes.nginxphp[0].id}",
+                                "path": "/var/www/webroot/ROOT/config/config.json",
+                                "replacements": [{
+                                        "pattern": "DBCONNECTION",
+                                        "replacement": "mattermost:${nodes.postgres9.password}@${nodes.postgres9.address}:5432/mattermost"
+                                    }
+                                ]
+                            }
+                        ]
+                    }, {
+                        "executeShellCommands": [{
+                                "nodeId": "${nodes.nginxphp[0].id}",
+                                "user": "root",
+                                "commands": [
+                                        "mkdir /var/www/supervisor.d",
+                                        "wget -q -O /etc/init.d/supervisord https://raw.githubusercontent.com/layershift/mattermost-jps/master/config/init 2>&1",
+                                        "wget -q -O /var/www/supervisord.conf https://raw.githubusercontent.com/layershift/mattermost-jps/master/config/supervisord 2>&1",
+                                        "wget -q -O /var/www/supervisor.d/mattermost.ini https://raw.githubusercontent.com/layershift/mattermost-jps/master/config/mattersuperv 2>&1",
+                                        "chown -R nginx:nginx /var/www/supervisord.conf /var/www/supervisor.d",
+                                        "chmod +x /etc/init.d/supervisord 2>&1",
+                                        "systemctl enable supervisord 2>&1",
+                                        "systemctl disable php-fpm 2>&1"
+                                ]
+                            }
+                        ]
+                    }, {
+                        "restartNodes": [{
+                                "nodeId": "${nodes.nginxphp[0].id}"
+                            }
+                        ]
+                    }
+                ]
+            }, {
+                "id": "startMattermost",
+                "onCall": [{
+                        "executeShellCommands": [{
+                                "nodeId": "${nodes.nginxphp[0].id}",
+                                "user": "root",
+                                "commands": [
+                                        "systemctl --quiet restart supervisord 2>&1",
+                                        "supervisorctl -c /var/www/supervisord.conf restart mattermost 2>&1"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }, {
+                "id": "stopMattermost",
+                "onCall": [{
+                        "executeShellCommands": [{
+                                "nodeId": "${nodes.nginxphp[0].id}",
+                                "user": "root",
+                                "commands": [
+                                        "supervisorctl -c /var/www/supervisord.conf stop mattermost 2>&1",
+                                        "systemctl --quiet stop supervisord 2>&1"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "success": {
+            "text": "<b>Finish Mattermost Server setup.</b><br /><ul><li>Navigate to <a href=\"${env.url}\" target=\"_blank\">${env.url}</a> and create a team and user.</li><li>The first user in the system is automatically granted the system_admin role, which gives you access to the System Console.</li><li>From the town-square channel click the dropdown and choose the System Console option.</li><li>Update Settings</li></ul>More about Layershift Mattermost installation at <a href=\"http://blog.layershift.com/how-to-run-mattermost/\">http://blog.layershift.com/how-to-run-mattermost/</a><br><br>Read more about Mattermost at <a href=\"http://www.mattermost.org/\">http://www.mattermost.org/</a>."
+        }
+    }
+}
