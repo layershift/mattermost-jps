@@ -2,5 +2,7 @@
 
 More info at: https://blog.layershift.com/how-to-run-mattermost/
 
-## TODO: Readme
+# LICENSE
+
+Licensed under GNU LGPLv3
 
